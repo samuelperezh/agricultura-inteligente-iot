@@ -59,7 +59,7 @@ void setup() {
 
 void loop() {
   unsigned long currentTime = millis();
-  if (currentTime - lastSendTime >= 300000 || lastSendTime == 0) {
+  if (currentTime - lastSendTime >= 30000 || lastSendTime == 0) {
     lastSendTime = currentTime;
     estado = 1;
     while (estado <= 4) {
