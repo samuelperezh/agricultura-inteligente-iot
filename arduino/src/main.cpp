@@ -10,7 +10,7 @@
 
 // Declaraciones
 static void smartDelay(unsigned long ms);
-void send_data(const char* id, float temperatura, float humedad, float latitud, float longitud);
+void send_data(const char* id, const char* atributo1, const char* atributo2, float valor1, float valor2 = 0);
 void leerGPS(void);
 float leerHumedadAmbiental(int n);
 float leerTemperatura(int n);
@@ -20,14 +20,14 @@ float leerHumedadPlanta(int n);
 const int analogPin = 33;
 const int ledPin = 25;
 static const uint32_t GPSBaud = 9600;
-const char* server = "18.212.13.195";
+const char* server = "54.227.149.158";
 const char* ssid = "PerezHurtado";
-const char* id = "point06";
 int estado = 0;
 const int prunning = 10;
 float temperatura, humedad, luz, proximidad, humedad_planta, latitud, longitud;
 int moisturePin = 33;
 float moistureLevel;
+unsigned long lastSendTime = 0;
 
 // Variables
 TinyGPSPlus gps;
@@ -58,35 +58,45 @@ void setup() {
 }
 
 void loop() {
-  switch(estado) {
-    case 1:
-      Serial.println("1. Leyendo datos de los sensores de Humedad, Temperatura, Luz y Proximidad");
-      temperatura = leerTemperatura(10);
-      humedad = leerHumedadAmbiental(10);
-      luz = leerLuz(10);
-      proximidad = leerProximidad(10);
-      humedad_planta = leerHumedadPlanta(10);
-      estado = 2;
-      break;
-    case 2:
-      Serial.println("2. Leyendo datos del GPS");
-      leerGPS();
-      estado = 3;
-      break;
-    case 3:
-      Serial.println("3. Enviando datos al servidor");
-      send_data(id, temperatura, humedad, latitud, longitud);
-      estado = 4;
-      break;
-    case 4:
-      Serial.println("4. Durmiendo");
-      delay(1000);
-      estado = 1;
-      break;
-    default:
-      Serial.println("No capturo estados");
-      delay(1000);
-      break;
+  unsigned long currentTime = millis();
+  if (currentTime - lastSendTime >= 300000 || lastSendTime == 0) {
+    lastSendTime = currentTime;
+    estado = 1;
+    while (estado <= 4) {
+      switch(estado) {
+        case 1:
+          Serial.println("1. Leyendo datos de los sensores de Humedad, Temperatura, Luz y Proximidad");
+          temperatura = leerTemperatura(10);
+          humedad = leerHumedadAmbiental(10);
+          luz = leerLuz(10);
+          proximidad = leerProximidad(10);
+          humedad_planta = leerHumedadPlanta(10);
+          estado = 2;
+          break;
+        case 2:
+          Serial.println("2. Leyendo datos del GPS");
+          leerGPS();
+          estado = 3;
+          break;
+        case 3:
+          Serial.println("3. Enviando datos al servidor");
+          send_data("sensorTemperatura", "temperatura", NULL, temperatura);
+          send_data("sensorHumedad", "humedad", NULL, humedad);
+          send_data("sensorLuz", "luz", NULL, luz);
+          send_data("sensorProximidad", "proximidad", NULL, proximidad);
+          send_data("sensorHumedadPlanta", "humedad", NULL, humedad_planta);
+          send_data("sensorGPS", "latitud", "longitud", latitud, longitud);
+          estado = 4;
+          break;
+        case 4:
+          Serial.println("4. Durmiendo");
+          estado = 5;
+          break;
+        default:
+          Serial.println("No capturo estados");
+          break;
+      }
+    }
   }
 }
 
@@ -100,33 +110,49 @@ static void smartDelay(unsigned long ms) {
 }
 
 // Función para enviar datos al servidor
-void send_data(const char* id, float temperatura, float humedad, float latitud, float longitud) {
-  doc["id"] = String(id);
-  doc["lat"] = latitud;
-  doc["lon"] = longitud;
-  doc["temperatura"] = temperatura;
-  doc["humedad"] = humedad;
+void send_data(const char* id, const char* atributo1, const char* atributo2, float valor1, float valor2) {
+  doc.clear();
+  JsonObject sendObj = doc[atributo1].to<JsonObject>();
+  sendObj["type"] = "numeric";
+  sendObj["value"] = valor1;
+  if (atributo2 != NULL) {
+    JsonObject sendObj2 = doc[atributo2].to<JsonObject>();
+    sendObj2["type"] = "numeric";
+    sendObj2["value"] = valor2;
+  }
   String postData;
   serializeJson(doc, postData);
 
-  if (client.connect(server, 80)) {
-    Serial.println("Conectado al servidor");
-    client.println("POST /update_data HTTP/1.1");
-    client.println("Host: " + String(server));
-    client.println("Content-Type: application/json");
-    client.println("Content-Length: " + String(postData.length()));
-    client.println();
-    client.println(postData);
-    Serial.println(postData);
+  while (true) {
+    if (client.connect(server, 1026)) {
+      client.println("PATCH /v2/entities/" + String(id) + "/attrs HTTP/1.1");
+      client.println("Host: " + String(server));
+      client.println("Content-Type: application/json");
+      client.println("Content-Length: " + String(postData.length()));
+      client.println();
+      client.println(postData);
+      Serial.println(postData);
+
+      delay(500);
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+        if (line.startsWith("HTTP")) {
+          break;
+        }
+      }
+    }
+    else {
+      Serial.println("Fallo al conectar al servidor, reintentando...");
+    }
+    delay(2000);
   }
-  else {
-    Serial.println("Fallo al conectar al servidor");
-  }
-  delay(500);
+
   while (client.available()) {
     String line = client.readStringUntil('\n');
     Serial.println(line);
   }
+  delay(2000);
 }
 
 // Función para leer datos del GPS
@@ -225,5 +251,5 @@ float leerHumedadPlanta(int n) {
     digitalWrite(ledPin, HIGH); // Turn off LED if outside the specified ranges
   }
   delay(30);
-  return humedadPlanta;
+  return porcentaje;
 }
