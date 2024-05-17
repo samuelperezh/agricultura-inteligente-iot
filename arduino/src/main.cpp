@@ -21,7 +21,7 @@ const int analogPin = 33;
 const int ledPin = 25;
 static const uint32_t GPSBaud = 9600;
 const char* server = "54.227.149.158";
-const char* ssid = "PerezHurtado";
+const char* ssid = "UPBWiFi";
 int estado = 0;
 const int prunning = 10;
 float temperatura, humedad, luz, proximidad, humedad_planta, latitud, longitud;
@@ -47,7 +47,7 @@ void setup() {
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, "Mencha707150*");
+  WiFi.begin(ssid, "");
   Serial.println("Conectando a la red WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     Serial.println("Intentando conectar a la red WiFi...");
@@ -241,7 +241,7 @@ float leerHumedadPlanta(int n) {
     delay(8);
   }
   float humedadPlanta = hum / n;
-  float porcentaje = map(humedadPlanta, 875, 800, 0, 100);
+  float porcentaje = map(humedadPlanta, 870, 800, 0, 100);
   porcentaje = constrain(porcentaje, 0, 100);
   Serial.print(porcentaje);
   Serial.println("%");
