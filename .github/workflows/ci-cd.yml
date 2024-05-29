@@ -67,6 +67,7 @@ jobs:
   # Job for building Docker image and deploying to AWS
   deploy-to-aws:
     runs-on: ubuntu-latest
+    needs: pytest-coverage
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -97,16 +98,24 @@ jobs:
           VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
           echo "::set-output name=vpc_id::$VPC_ID"
 
+      - name: Generate random names for key and security group
+        id: generate_names
+        run: |
+          KEY_NAME="LlaveIoT-$(date +%s)"
+          SG_NAME="my-sg-$(date +%s)"
+          echo "::set-output name=key_name::$KEY_NAME"
+          echo "::set-output name=sg_name::$SG_NAME"
+
       - name: Create key pair
         id: create_key
         run: |
-          aws ec2 create-key-pair --key-name LlaveIoT --query 'KeyMaterial' --output text > LlaveIoT.pem
-          chmod 400 LlaveIoT.pem
+          aws ec2 create-key-pair --key-name ${{ steps.generate_names.outputs.key_name }} --query 'KeyMaterial' --output text > ${{ steps.generate_names.outputs.key_name }}.pem
+          chmod 400 ${{ steps.generate_names.outputs.key_name }}.pem
 
       - name: Create security group
         id: create_security_group
         run: |
-          GROUP_ID=$(aws ec2 create-security-group --group-name my-sg --description "My security group" --vpc-id ${{ steps.get_vpc_id.outputs.vpc_id }} --query 'GroupId' --output text)
+          GROUP_ID=$(aws ec2 create-security-group --group-name ${{ steps.generate_names.outputs.sg_name }} --description "My security group" --vpc-id ${{ steps.get_vpc_id.outputs.vpc_id }} --query 'GroupId' --output text)
           aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
           aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 1026 --cidr 0.0.0.0/0
           aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
@@ -119,7 +128,7 @@ jobs:
       - name: Launch EC2 instance
         id: launch_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name LlaveIoT --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name ${{ steps.generate_names.outputs.key_name }} --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
       - name: Wait for instance to be running
@@ -134,7 +143,7 @@ jobs:
 
       - name: Create directories on instance
         run: |
-          ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
+          ssh -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
             mkdir -p ~/crate-db-data
             mkdir -p ~/grafana-data
             mkdir -p ~/mongo-db-data
@@ -143,14 +152,14 @@ jobs:
 
       - name: Copy data to instance
         run: |
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/crate-db-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/grafana-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/mongo-db-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/server
+          scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/crate-db-data
+          scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/grafana-data
+          scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/mongo-db-data
+          scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/server
 
       - name: Execute setup commands on instance
         run: |
-          ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
+          ssh -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
             sudo apt update
             sudo apt install docker-compose -y
             sudo chmod 777 -R ~/crate-db-data/
@@ -163,3 +172,4 @@ jobs:
             sudo sysctl -p
             sudo docker-compose up -d
           EOF
+
