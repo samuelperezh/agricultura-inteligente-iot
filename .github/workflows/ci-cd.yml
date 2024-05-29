@@ -127,7 +127,7 @@ jobs:
       - name: Launch EC2 instance
         id: launch_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-Oe001c9271cf7f3b9 --count 1 --instance-type t3.large --key-name ${{ steps.generate_names.outputs.key_name }} --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-0e001c9271cf7f3b9 --count 1 --instance-type t3.large --key-name ${{ steps.generate_names.outputs.key_name }} --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
       - name: Wait for instance to be running
