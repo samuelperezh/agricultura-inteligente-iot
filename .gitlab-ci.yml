@@ -20,7 +20,7 @@ pytest-coverage:
 
 build-flutter-app:
   stage: build_deploy
-  image: cirrusci/flutter:latest
+  image: cirruslabs/flutter:latest
   script:
     - cd app
     - flutter pub get
