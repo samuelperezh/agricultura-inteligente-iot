@@ -1,7 +1,6 @@
 stages:
   - test
-  - build
-  - deploy
+  - build_deploy
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -20,9 +19,10 @@ pytest-coverage:
     expire_in: 1 day
 
 build-flutter-app:
-  stage: build
+  stage: build_deploy
   image: cirrusci/flutter:latest
   script:
+    - cd app
     - flutter pub get
     - flutter build apk --release
   artifacts:
@@ -31,7 +31,7 @@ build-flutter-app:
     expire_in: 1 day
 
 deploy-to-aws:
-  stage: deploy
+  stage: build_deploy
   image: python:3.10
   needs: 
     - pytest-coverage
