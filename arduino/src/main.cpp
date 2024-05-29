@@ -21,7 +21,7 @@ const int analogPin = 33;
 const int ledPin = 25;
 static const uint32_t GPSBaud = 9600;
 const char* server = "54.227.149.158";
-const char* ssid = "UPBWiFi";
+const char* ssid = "PerezHurtado";
 int estado = 0;
 const int prunning = 10;
 float temperatura, humedad, luz, proximidad, humedad_planta, latitud, longitud;
@@ -47,7 +47,7 @@ void setup() {
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, "");
+  WiFi.begin(ssid, "Mencha707150*");
   Serial.println("Conectando a la red WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     Serial.println("Intentando conectar a la red WiFi...");
@@ -59,7 +59,7 @@ void setup() {
 
 void loop() {
   unsigned long currentTime = millis();
-  if (currentTime - lastSendTime >= 30000 || lastSendTime == 0) {
+  if (currentTime - lastSendTime >= 3000 || lastSendTime == 0) {
     lastSendTime = currentTime;
     estado = 1;
     while (estado <= 4) {
