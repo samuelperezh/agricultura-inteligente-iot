@@ -33,6 +33,8 @@ build-flutter-app:
 deploy-to-aws:
   stage: deploy
   image: python:3.10
+  needs: 
+    - pytest-coverage
   before_script:
     - apt-get update
     - apt-get install -y awscli
