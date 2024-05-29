@@ -160,6 +160,7 @@ jobs:
           scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/grafana-data
           scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/mongo-db-data
           scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/server
+          scp -i ${{ steps.generate_names.outputs.key_name }}.pem -o StrictHostKeyChecking=no ./docker-compose.yml ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/docker-compose.yml
 
       - name: Execute setup commands on instance
         run: |
@@ -176,4 +177,3 @@ jobs:
             sudo sysctl -p
             sudo docker-compose up -d
           EOF
-
