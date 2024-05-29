@@ -141,9 +141,9 @@ jobs:
           echo "::set-output name=instance_ip::$INSTANCE_IP"
           
       - name: Wait for SSH to be available
-          run: |
-            echo "Waiting for SSH to be available..."
-            sleep 60
+        run: |
+          echo "Waiting for SSH to be available..."
+          sleep 60
 
       - name: Create directories on instance
         run: |
