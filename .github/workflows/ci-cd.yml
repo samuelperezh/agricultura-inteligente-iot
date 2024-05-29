@@ -73,18 +73,18 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+        run: |
+          mkdir -p ~/.aws
+          echo "[default]" > ~/.aws/credentials
+          echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
+          echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
+          echo "aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}" >> ~/.aws/credentials
 
       - name: Create key pair
         id: create_key
         run: |
-          aws ec2 create-key-pair --key-name LlaveAWS --query 'KeyMaterial' --output text > LlaveAWS.pem
-          chmod 400 LlaveAWS.pem
+          aws ec2 create-key-pair --key-name MyKeyPair --query 'KeyMaterial' --output text > MyKeyPair.pem
+          chmod 400 MyKeyPair.pem
 
       - name: Create security group
         id: create_security_group
@@ -102,7 +102,7 @@ jobs:
       - name: Launch EC2 instance
         id: launch_instance
         run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name LlaveAWS --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name MyKeyPair --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
           echo "::set-output name=instance_id::$INSTANCE_ID"
 
       - name: Wait for instance to be running
@@ -117,7 +117,7 @@ jobs:
 
       - name: Create directories on instance
         run: |
-          ssh -i LlaveAWS.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
+          ssh -i MyKeyPair.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
             mkdir -p ~/crate-db-data
             mkdir -p ~/grafana-data
             mkdir -p ~/mongo-db-data
@@ -126,14 +126,14 @@ jobs:
 
       - name: Copy data to instance
         run: |
-          scp -i LlaveAWS.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/crate-db-data
-          scp -i LlaveAWS.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/grafana-data
-          scp -i LlaveAWS.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/mongo-db-data
-          scp -i LlaveAWS.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/server
+          scp -i MyKeyPair.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/crate-db-data
+          scp -i MyKeyPair.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/grafana-data
+          scp -i MyKeyPair.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/mongo-db-data
+          scp -i MyKeyPair.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/server
 
       - name: Execute setup commands on instance
         run: |
-          ssh -i LlaveAWS.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
+          ssh -i MyKeyPair.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
             sudo apt update
             sudo apt install docker-compose -y
             sudo chmod 777 -R ~/crate-db-data/
