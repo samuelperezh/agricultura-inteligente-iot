@@ -1,0 +1,86 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+pytest-coverage:
+  stage: test
+  image: python:3.10
+  script:
+    - cd server
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+    - pytest --cov=app --cov-report=html
+  artifacts:
+    paths:
+      - server/htmlcov
+    expire_in: 1 day
+
+build-flutter-app:
+  stage: build
+  image: cirrusci/flutter:latest
+  script:
+    - flutter pub get
+    - flutter build apk --release
+  artifacts:
+    paths:
+      - app/build/app/outputs/flutter-apk/app-release.apk
+    expire_in: 1 day
+
+deploy-to-aws:
+  stage: deploy
+  image: python:3.10
+  before_script:
+    - apt-get update
+    - apt-get install -y awscli
+    - mkdir -p ~/.aws
+    - echo "[default]" > ~/.aws/credentials
+    - echo "aws_access_key_id=${AWS_ACCESS_KEY_ID}" >> ~/.aws/credentials
+    - echo "aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}" >> ~/.aws/credentials
+    - echo "aws_session_token=${AWS_SESSION_TOKEN}" >> ~/.aws/credentials
+    - echo "[default]" > ~/.aws/config
+    - echo "region=${AWS_REGION}" >> ~/.aws/config
+  script:
+    - aws sts get-caller-identity
+    - VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
+    - KEY_NAME="LlaveIoT-$(date +%s)"
+    - SG_NAME="my-sg-$(date +%s)"
+    - echo "KEY_NAME=$KEY_NAME"
+    - echo "SG_NAME=$SG_NAME"
+    - aws ec2 create-key-pair --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
+    - chmod 400 $KEY_NAME.pem
+    - GROUP_ID=$(aws ec2 create-security-group --group-name $SG_NAME --description "My security group" --vpc-id $VPC_ID --query 'GroupId' --output text)
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 1026 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 4200 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 5432 --cidr 0.0.0.0/0
+    - aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 3000 --cidr 0.0.0.0/0
+    - INSTANCE_ID=$(aws ec2 run-instances --image-id ami-0e001c9271cf7f3b9 --count 1 --instance-type t3.large --key-name $KEY_NAME --security-group-ids $GROUP_ID --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
+    - aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+    - INSTANCE_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+    - echo "INSTANCE_IP=$INSTANCE_IP"
+    - sleep 60
+    - ssh -i $KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$INSTANCE_IP "mkdir -p ~/crate-db-data ~/grafana-data ~/mongo-db-data ~/server"
+    - scp -i $KEY_NAME.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@$INSTANCE_IP:~/crate-db-data
+    - scp -i $KEY_NAME.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@$INSTANCE_IP:~/grafana-data
+    - scp -i $KEY_NAME.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@$INSTANCE_IP:~/mongo-db-data
+    - scp -i $KEY_NAME.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@$INSTANCE_IP:~/server
+    - scp -i $KEY_NAME.pem -o StrictHostKeyChecking=no ./docker-compose.yml ubuntu@$INSTANCE_IP:~/docker-compose.yml
+    - ssh -i $KEY_NAME.pem -o StrictHostKeyChecking=no ubuntu@$INSTANCE_IP << 'EOF'
+        sudo apt update
+        sudo apt install docker-compose -y
+        sudo chmod 777 -R ~/crate-db-data/
+        sudo chmod 777 -R ~/grafana-data/
+        sudo chmod 777 -R ~/mongo-db-data/
+        cd ~/server/
+        sudo docker build -t iot-app:latest .
+        cd ~
+        echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p
+        sudo docker-compose up -d
+      EOF

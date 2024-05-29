@@ -19,7 +19,7 @@ server = Flask(__name__)
 CORS(server)
 app = dash.Dash(server=server, routes_pathname_prefix="/", external_stylesheets=[bdc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
-basededatos = "http://localhost:4200"
+basededatos = "http://0.0.0.0:4200"
 
 def leer(url_db, variable, tabla, entity):
     con = client.connect(url_db)
