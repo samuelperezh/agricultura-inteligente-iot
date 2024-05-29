@@ -13,6 +13,7 @@ services:
     depends_on:
       - mongo-db
     command: -dbhost mongo
+    restart: always
 
   mongo-db:
     image: mongo:3.6
@@ -26,6 +27,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo-db-data:/data/db
+    restart: always
 
   quantumleap:
     image: smartsdk/quantumleap
@@ -42,6 +44,7 @@ services:
     environment:
       - CRATE_HOST=crate-db
       - LOGLEVEL=DEBUG
+    restart: always
 
   crate-db:
     image: crate
@@ -61,6 +64,7 @@ services:
     command: crate -Cauth.host_based.enabled=false -Ccluster.name=crate -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
     environment:
       - CRATE_HEAP_SIZE=1g
+    restart: always
 
   grafana:
     image: grafana/grafana
@@ -76,6 +80,24 @@ services:
       - crate-db
     volumes:
       - grafana-data:/var/lib/grafana
+    restart: always
+
+  iot-app:
+    image: iot-app:latest
+    hostname: iot-app
+    container_name: iot-app
+    networks:
+      - default
+    expose:
+      - "80"
+    ports:
+      - "80:80"
+    depends_on:
+      - orion
+      - mongo-db
+      - quantumleap
+      - crate-db
+    restart: always
 
 networks:
   default:
