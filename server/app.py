@@ -19,7 +19,7 @@ server = Flask(__name__)
 CORS(server)
 app = dash.Dash(server=server, routes_pathname_prefix="/", external_stylesheets=[bdc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
 
-basededatos = "http://0.0.0.0:4200"
+basededatos = "http://crate-db:4200"
 
 def leer(url_db, variable, tabla, entity):
     con = client.connect(url_db)
@@ -97,11 +97,33 @@ app.layout = html.Div([
 ])
 
 inicio_layout = html.Div([
-    html.H2("Información del proyecto", style={'text-align': 'center'}),
-    html.P("Este es un proyecto de IoT que permite monitorear la planta Primavera. Se utilizan sensores de humedad, temperatura y luz para obtener información en tiempo real. Además, se toman fotos de las plantas para tener un historial de su crecimiento."),
-    html.H2("Primavera"),
-    html.P("La planta Primavera es una planta de interior que necesita cuidados especiales. Es una planta que necesita mucha luz y poca agua. Se recomienda regarla una vez a la semana y mantenerla en un lugar con luz indirecta."),
-    html.Img(src='https://images.meredith.com/content/dam/bhg/Images/life-in-color/whopper%20begonia.jpg.rendition.largest.jpg', alt= 'Primavera', style={'width':'50%'}),
+    html.H2("Información del proyecto", style={'text-align': 'center', 'margin-top': '20px'}),
+    html.P(
+        "Este es un proyecto de IoT que permite monitorear la planta Peperomia Velita. Se utilizan sensores de humedad, temperatura y luz para obtener información en tiempo real. Además, se toman fotos de las plantas para tener un historial de su crecimiento.",
+        style={'text-align': 'center', 'margin': '20px'}
+    ),
+    html.H2("Peperomia Velita", style={'text-align': 'center', 'margin-top': '20px'}),
+    html.P(
+        "La Peperomia Velita es una planta de interior conocida por su follaje compacto y atractivo. Necesita cuidados específicos para prosperar. A continuación, se detallan sus características y cuidados óptimos:",
+        style={'text-align': 'center', 'margin': '20px'}
+    ),
+    html.Img(src='assets/banner.jpeg', alt='Peperomia Velita', style={'display': 'block', 'margin': '0 auto', 'width': '50%'}),
+    html.H3("Características", style={'text-align': 'center', 'margin-top': '20px'}),
+    html.P(
+        "La Peperomia Velita tiene hojas pequeñas y carnosas que retienen agua, lo que la hace ideal para interiores. Es una planta que no crece mucho en altura, pero se extiende lateralmente.",
+        style={'text-align': 'center', 'margin': '20px'}
+    ),
+    html.H3("Cuidados", style={'text-align': 'center', 'margin-top': '20px'}),
+    html.P(
+        "Para mantener tu Peperomia Velita saludable, sigue estos consejos:",
+        style={'text-align': 'center', 'margin': '20px'}
+    ),
+    html.Ul([
+        html.Li("Temperatura: Mantén la planta en un rango de 18-24°C."),
+        html.Li("Humedad: Prefiere ambientes con alta humedad, aunque puede tolerar niveles más bajos."),
+        html.Li("Luz: Necesita luz indirecta brillante. Evita la luz solar directa que puede quemar sus hojas."),
+        html.Li("Riego: Riega moderadamente, dejando que la capa superior del suelo se seque entre riegos. Evita el exceso de agua para prevenir la pudrición de raíces."),
+    ], style={'text-align': 'left', 'margin': '20px 20px 20px 40px'})
 ])
 
 sensores_layout = html.Div([
@@ -122,12 +144,35 @@ sensores_layout = html.Div([
 ])
 
 informacion_layout = html.Div([
-    html.H2("Historial de la planta", style={'text-align': 'center'}),
+    html.H2("Historial de la planta", style={'text-align': 'center', 'margin-top': '20px'}),
+    
+    html.Div([
+        html.Div([
+            html.P("16/05", style={'text-align': 'center'}),
+            html.Img(src='assets/1605.jpeg', alt='16 de Mayo', style={'display': 'block', 'margin': '0 auto', 'width': '80%'}),
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '1%'}),
+        
+        html.Div([
+            html.P("19/05", style={'text-align': 'center'}),
+            html.Img(src='assets/1905.jpeg', alt='19 de Mayo', style={'display': 'block', 'margin': '0 auto', 'width': '80%'}),
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '1%'}),
+        
+        html.Div([
+            html.P("20/05", style={'text-align': 'center'}),
+            html.Img(src='assets/2005.jpeg', alt='20 de Mayo', style={'display': 'block', 'margin': '0 auto', 'width': '80%'}),
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '1%'}),
+        
+        html.Div([
+            html.P("29/05", style={'text-align': 'center'}),
+            html.Img(src='assets/2905.jpeg', alt='29 de Mayo', style={'display': 'block', 'margin': '0 auto', 'width': '80%'}),
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '1%'}),
+        
+    ], style={'text-align': 'center', 'margin-top': '20px'}),
 ])
 
 @app.callback(Output('contenido', 'children'), Input('url', 'pathname'))
 def mostrar_contenido(pathname):
-    if pathname == '/inicio':
+    if pathname == '/' or pathname == '/inicio':
         return inicio_layout
     elif pathname == '/sensores':
         return sensores_layout
