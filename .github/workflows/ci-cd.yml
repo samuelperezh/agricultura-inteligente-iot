@@ -1,0 +1,114 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # Job for running pytest coverage
+  pytest-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10.13'
+
+      - name: Install dependencies
+        run: |
+          cd server
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          cd server
+          pytest --cov=app --cov-report=html
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage-report
+          path: server/htmlcov
+
+  # Job for building Flutter app
+  build-flutter-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.4.1'
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: app
+
+      - name: Build Flutter app
+        run: flutter build apk --release
+        working-directory: app
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: flutter-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+  # Job for building Docker image and deploying to AWS
+  deploy-to-aws:
+    runs-on: ubuntu-latest
+    needs: pytest-coverage
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build Docker image
+        run: |
+          cd server
+          docker build -t my-dash-app .
+
+      - name: Push Docker image to ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          docker tag my-dash-app:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-dash-app:latest
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-dash-app:latest
+
+      - name: Launch EC2 instance
+        id: launch_ec2
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-0e001c9271cf7f3b9 --count 1 --instance-type t3.large --key-name MyKeyPair --block-device-mappings DeviceName=/dev/sdh,Ebs={VolumeSize=30} --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=my-ec2-instance}]' --query 'Instances[0].InstanceId' --output text)
+          echo "INSTANCE_ID=${INSTANCE_ID}" >> $GITHUB_ENV
+          aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+          INSTANCE_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          echo "INSTANCE_IP=${INSTANCE_IP}" >> $GITHUB_ENV
+
+      - name: Copy files to EC2 instance
+        run: |
+          scp -i MyKeyPair.pem -o StrictHostKeyChecking=no -r ./data ubuntu@${{ env.INSTANCE_IP }}:/home/ubuntu/
+
+      - name: Deploy Docker Compose
+        run: |
+          ssh -i MyKeyPair.pem -o StrictHostKeyChecking=no ubuntu@${{ env.INSTANCE_IP }} << 'EOF'
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-dash-app:latest
+          cd /home/ubuntu
+          aws s3 cp s3://my-bucket/data /home/ubuntu/data --recursive
+          docker-compose up -d
+          EOF
