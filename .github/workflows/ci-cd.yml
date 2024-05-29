@@ -65,102 +65,101 @@ jobs:
           path: app/build/app/outputs/flutter-apk/app-release.apk
 
   # Job for building Docker image and deploying to AWS
-  deploy-to-aws:
-    runs-on: ubuntu-latest
-    needs: pytest-coverage
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+deploy-to-aws:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Install AWS CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y awscli
-          aws --version
+    - name: Install AWS CLI
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y awscli
+        aws --version
 
-      - name: Configure AWS credentials
-        run: |
-          mkdir -p ~/.aws
-          echo "[default]" > ~/.aws/credentials
-          echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
-          echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
-          echo "aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}" >> ~/.aws/credentials
-          echo "[default]" > ~/.aws/config
-          echo "region=${{ secrets.AWS_REGION }}" >> ~/.aws/config
+    - name: Configure AWS credentials
+      run: |
+        mkdir -p ~/.aws
+        echo "[default]" > ~/.aws/credentials
+        echo "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
+        echo "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
+        echo "aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}" >> ~/.aws/credentials
+        echo "[default]" > ~/.aws/config
+        echo "region=${{ secrets.AWS_REGION }}" >> ~/.aws/config
 
-      - name: Debug AWS CLI Configuration
-        run: |
-          aws sts get-caller-identity
+    - name: Debug AWS CLI Configuration
+      run: |
+        aws sts get-caller-identity
 
-      - name: Get default VPC ID
-        id: get_vpc_id
-        run: |
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
-          echo "::set-output name=vpc_id::$VPC_ID"
+    - name: Get default VPC ID
+      id: get_vpc_id
+      run: |
+        VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
+        echo "::set-output name=vpc_id::$VPC_ID"
 
-      - name: Create key pair
-        id: create_key
-        run: |
-          aws ec2 create-key-pair --key-name LlaveIoT --query 'KeyMaterial' --output text > LlaveIoT.pem
-          chmod 400 LlaveIoT.pem
+    - name: Create key pair
+      id: create_key
+      run: |
+        aws ec2 create-key-pair --key-name LlaveIoT --query 'KeyMaterial' --output text > LlaveIoT.pem
+        chmod 400 LlaveIoT.pem
 
-      - name: Create security group
-        id: create_security_group
-        run: |
-          GROUP_ID=$(aws ec2 create-security-group --group-name my-sg --description "My security group" --vpc-id ${{ steps.get_vpc_id.outputs.vpc_id }} --query 'GroupId' --output text)
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 1026 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 4200 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 5432 --cidr 0.0.0.0/0
-          aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 3000 --cidr 0.0.0.0/0
-          echo "::set-output name=group_id::$GROUP_ID"
+    - name: Create security group
+      id: create_security_group
+      run: |
+        GROUP_ID=$(aws ec2 create-security-group --group-name my-sg --description "My security group" --vpc-id ${{ steps.get_vpc_id.outputs.vpc_id }} --query 'GroupId' --output text)
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 1026 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 4200 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 5432 --cidr 0.0.0.0/0
+        aws ec2 authorize-security-group-ingress --group-id $GROUP_ID --protocol tcp --port 3000 --cidr 0.0.0.0/0
+        echo "::set-output name=group_id::$GROUP_ID"
 
-      - name: Launch EC2 instance
-        id: launch_instance
-        run: |
-          INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name LlaveIoT --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
-          echo "::set-output name=instance_id::$INSTANCE_ID"
+    - name: Launch EC2 instance
+      id: launch_instance
+      run: |
+        INSTANCE_ID=$(aws ec2 run-instances --image-id ami-04b70fa74e45c3917 --count 1 --instance-type t3.large --key-name LlaveIoT --security-group-ids ${{ steps.create_security_group.outputs.group_id }} --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=30} --query 'Instances[0].InstanceId' --output text)
+        echo "::set-output name=instance_id::$INSTANCE_ID"
 
-      - name: Wait for instance to be running
-        run: |
-          aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
+    - name: Wait for instance to be running
+      run: |
+        aws ec2 wait instance-running --instance-ids ${{ steps.launch_instance.outputs.instance_id }}
 
-      - name: Get instance public DNS
-        id: get_instance_dns
-        run: |
-          INSTANCE_DNS=$(aws ec2 describe-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicDnsName' --output text)
-          echo "::set-output name=instance_dns::$INSTANCE_DNS"
+    - name: Get instance public IP
+      id: get_instance_ip
+      run: |
+        INSTANCE_IP=$(aws ec2 describe-instances --instance-ids ${{ steps.launch_instance.outputs.instance_id }} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+        echo "::set-output name=instance_ip::$INSTANCE_IP"
 
-      - name: Create directories on instance
-        run: |
-          ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
-            mkdir -p ~/crate-db-data
-            mkdir -p ~/grafana-data
-            mkdir -p ~/mongo-db-data
-            mkdir -p ~/server
-          EOF
+    - name: Create directories on instance
+      run: |
+        ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
+          mkdir -p ~/crate-db-data
+          mkdir -p ~/grafana-data
+          mkdir -p ~/mongo-db-data
+          mkdir -p ~/server
+        EOF
 
-      - name: Copy data to instance
-        run: |
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/crate-db-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/grafana-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/mongo-db-data
-          scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }}:~/server
+    - name: Copy data to instance
+      run: |
+        scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/crate-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/crate-db-data
+        scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/grafana-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/grafana-data
+        scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./data/mongo-db-data/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/mongo-db-data
+        scp -i LlaveIoT.pem -o StrictHostKeyChecking=no -r ./server/* ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }}:~/server
 
-      - name: Execute setup commands on instance
-        run: |
-          ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_dns.outputs.instance_dns }} << 'EOF'
-            sudo apt update
-            sudo apt install docker-compose -y
-            sudo chmod 777 -R ~/crate-db-data/
-            sudo chmod 777 -R ~/grafana-data/
-            sudo chmod 777 -R ~/mongo-db-data/
-            cd ~/server/
-            sudo docker build -t iot-app:latest .
-            cd ~
-            echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
-            sudo sysctl -p
-            sudo docker-compose up -d
-          EOF 
+    - name: Execute setup commands on instance
+      run: |
+        ssh -i LlaveIoT.pem -o StrictHostKeyChecking=no ubuntu@${{ steps.get_instance_ip.outputs.instance_ip }} << 'EOF'
+          sudo apt update
+          sudo apt install docker-compose -y
+          sudo chmod 777 -R ~/crate-db-data/
+          sudo chmod 777 -R ~/grafana-data/
+          sudo chmod 777 -R ~/mongo-db-data/
+          cd ~/server/
+          sudo docker build -t iot-app:latest .
+          cd ~
+          echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+          sudo docker-compose up -d
+        EOF
